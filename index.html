@@ -61,7 +61,7 @@
         streamingAssetsUrl: "StreamingAssets",
         companyName: "DefaultCompany",
         productName: "durumstudio",
-        productVersion: "1.0.2",
+        productVersion: "1.0.4",
         showBanner: unityShowBanner,
         // errorHandler: function(err, url, line) {
         //    alert("error " + err + " occurred at line " + line);
@@ -110,9 +110,24 @@
 
       document.querySelector("#unity-loading-bar").style.display = "block";
 
+      async function loadChunkedAsset(name, count, mimeType) {
+        var parts = await Promise.all(Array.from({ length: count }, async (_, index) => {
+          var path = buildUrl + "/chunks/v5/" + name + "." + String(index).padStart(2, "0") + ".part";
+          var response = await fetch(path);
+          if (!response.ok) throw new Error("Oyun dosyasi indirilemedi: " + path);
+          return response.arrayBuffer();
+        }));
+        return URL.createObjectURL(new Blob(parts, { type: mimeType }));
+      }
+
       var script = document.createElement("script");
       script.src = loaderUrl;
-      script.onload = () => {
+      script.onload = async () => {
+        try {
+          [config.dataUrl, config.codeUrl] = await Promise.all([
+            loadChunkedAsset("Web.data", 4, "application/octet-stream"),
+            loadChunkedAsset("Web.wasm", 9, "application/wasm")
+          ]);
         createUnityInstance(canvas, config, (progress) => {
           document.querySelector("#unity-progress-bar-full").style.width = 100 * progress + "%";
               }).then((unityInstance) => {
@@ -124,6 +139,9 @@
               }).catch((message) => {
                 alert(message);
               });
+        } catch (error) {
+          unityShowBanner(String(error), "error");
+        }
             };
 
       document.body.appendChild(script);
